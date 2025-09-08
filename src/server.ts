@@ -18,10 +18,13 @@ type IRequest = {
 
 const instancePath = path.join("./instance", "token-medico");
 
+let sock: ReturnType<typeof makeWASocket> | null = null;
+let isConnected = false;
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(instancePath);
 
-  const sock = makeWASocket({
+  sock = makeWASocket({
     auth: state,
     printQRInTerminal: false,
   });
@@ -35,10 +38,12 @@ async function startBot() {
     }
 
     if (connection === "open") {
+      isConnected = true;
       console.log("✅ Conectado ao WhatsApp!");
     }
 
     if (connection === "close") {
+      isConnected = false;
       const shouldReconnect =
         (lastDisconnect?.error as any)?.output?.statusCode !==
         DisconnectReason.loggedOut;
@@ -55,32 +60,29 @@ async function startBot() {
   });
 
   sock.ev.on("creds.update", saveCreds);
-
-  app.post("/enviar", async (req, res) => {
-    try {
-      const { telefone, token } = req.body as IRequest;
-      console.log(req.body);
-      
-      if (!telefone || !token) {
-        return res
-          .status(400)
-          .json({ error: "Telefone e token são obrigatórios!" });
-      }
-
-      await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
-        text: `O seu token de acesso: ${token}`,
-      });
-
-      return res.json({
-        success: true,
-        message: "Mensagem enviada com sucesso!",
-      });
-    } catch (err) {
-      console.error("Erro ao enviar mensagem:", err);
-      return res.status(500).json({ error: "Erro ao enviar mensagem." });
-    }
-  });
 }
+
+app.post("/enviar", async (req, res) => {
+  const { telefone, token } = req.body as IRequest;
+  console.log(req.body);
+
+  if (!sock || !isConnected) {
+    return res
+      .status(500)
+      .json({ error: "WhatsApp não está conectado. Escaneie o QR Code." });
+  }
+
+  try {
+    await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
+      text: `O seu token de acesso: ${token}`,
+    });
+
+    return res.sendStatus(200);
+  } catch (err) {
+    console.error("Erro ao enviar mensagem:", err);
+    return res.status(500).json({ error: "Falha ao enviar mensagem." });
+  }
+});
 
 startBot();
 
