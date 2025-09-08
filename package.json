@@ -1,0 +1,28 @@
+{
+  "name": "openai-baileys",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx --watch src/server.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@hapi/boom": "^10.0.1",
+    "@whiskeysockets/baileys": "^6.7.19",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "openai": "^5.19.1",
+    "qrcode-terminal": "^0.12.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/qrcode-terminal": "^0.12.2"
+  }
+}
