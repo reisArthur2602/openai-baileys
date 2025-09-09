@@ -11,6 +11,17 @@ import qrCodeTerminal from "qrcode-terminal";
 import fs from "fs";
 import { pino } from "pino";
 
+const logger = pino({
+  level: "info",
+  transport: {
+    target: "pino-pretty",
+    options: {
+      colorize: true,
+      translateTime: "SYS:standard",
+    },
+  },
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -21,7 +32,7 @@ const start = async (sessionId: string = "default") => {
   const { state, saveCreds } = await useMultiFileAuthState(`auth/${sessionId}`);
 
   const sock = makeWASocket({
-    printQRInTerminal: true,
+    printQRInTerminal: false,
     auth: state,
     logger: pino({ level: "silent" }),
   });
@@ -32,23 +43,24 @@ const start = async (sessionId: string = "default") => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.clear();
-      console.log(`📲 [${sessionId}] Escaneie o QR Code abaixo para logar:`);
+      logger.info(`[${sessionId}] QR Code gerado. Escaneie para logar.`);
       qrCodeTerminal.generate(qr, { small: true });
     }
 
-    if (connection === "open") console.log();
+    if (connection === "open") {
+      logger.info(`[${sessionId}] Sessão conectada com sucesso ✅`);
+    }
 
     if (connection === "close") {
       const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
       if (reason === DisconnectReason.loggedOut) {
-        console.log(`⚠️ [${sessionId}] Sessão deslogada. Limpando arquivos...`);
+        logger.warn(`[${sessionId}] Sessão deslogada. Limpando arquivos...`);
         sessions.delete(sessionId);
         fs.rmSync(`auth/${sessionId}`, { recursive: true, force: true });
         await start("default");
       } else {
-        console.log(`🔄 Reconectando sessão ${sessionId}...`);
+        logger.warn(`[${sessionId}] Conexão perdida. Tentando reconectar...`);
         await start("default");
       }
     }
@@ -64,6 +76,7 @@ app.post("/enviar", async (req, res) => {
   };
 
   if (!telefone || !token) {
+    logger.error("Tentativa de envio sem telefone ou token");
     return res.status(400).json({
       status: "error",
       message: "É necessário informar o token e o telefone",
@@ -71,10 +84,10 @@ app.post("/enviar", async (req, res) => {
   }
 
   const sessionId = "default";
-
   const sock = sessions.get(sessionId);
 
   if (!sock) {
+    logger.error("Sessão não iniciada ao tentar enviar mensagem");
     return res.status(500).json({
       status: "error",
       message: "Sessão não iniciada",
@@ -85,10 +98,11 @@ app.post("/enviar", async (req, res) => {
     text: `O seu token de acesso: ${token}`,
   });
 
+  logger.info(`Mensagem enviada para ${telefone}`);
   return res.sendStatus(200);
 });
 
 app.listen(3333, async () => {
-  console.log("🚀 Server rodando na porta 3333");
+  logger.info("🚀 Server rodando na porta 3333");
   await start("default");
 });
