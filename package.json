@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx --watch src/server.ts",
-    "proxy": "npx ngrok http"
+    "build": "tsc --project tsconfig.json",
+    "start": "node dist/server.js",
+    "proxy": "npx ngrok http 3333"
   },
   "keywords": [],
   "author": "",
