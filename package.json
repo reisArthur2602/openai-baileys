@@ -4,18 +4,20 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx --watch src/server.ts"
+    "dev": "tsx --watch src/server.ts",
+    "proxy": "npx ngrok http"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.19",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "openai": "^5.19.1",
+    "pino": "^9.9.4",
     "qrcode-terminal": "^0.12.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"

@@ -3,89 +3,92 @@ import cors from "cors";
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
+  type WASocket,
 } from "@whiskeysockets/baileys";
+
+import { Boom } from "@hapi/boom";
 import qrCodeTerminal from "qrcode-terminal";
-import path from "path";
+import fs from "fs";
+import { pino } from "pino";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-type IRequest = {
-  telefone: string;
-  token: string;
-};
+const sessions = new Map<string, WASocket>();
 
-const instancePath = path.join("./instance", "token-medico");
+const start = async (sessionId: string = "default") => {
+  const { state, saveCreds } = await useMultiFileAuthState(`auth/${sessionId}`);
 
-let sock: ReturnType<typeof makeWASocket> | null = null;
-let isConnected = false;
-
-async function startBot() {
-  const { state, saveCreds } = await useMultiFileAuthState(instancePath);
-
-  sock = makeWASocket({
+  const sock = makeWASocket({
+    printQRInTerminal: true,
     auth: state,
-    printQRInTerminal: false,
+    logger: pino({ level: "silent" }),
   });
 
-  sock.ev.on("connection.update", (update) => {
+  sessions.set(sessionId, sock);
+
+  sock.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      console.log("📲 Escaneie o QR Code abaixo para conectar:");
+      console.clear();
+      console.log(`📲 [${sessionId}] Escaneie o QR Code abaixo para logar:`);
       qrCodeTerminal.generate(qr, { small: true });
     }
 
-    if (connection === "open") {
-      isConnected = true;
-      console.log("✅ Conectado ao WhatsApp!");
-    }
+    if (connection === "open") console.log();
 
     if (connection === "close") {
-      isConnected = false;
-      const shouldReconnect =
-        (lastDisconnect?.error as any)?.output?.statusCode !==
-        DisconnectReason.loggedOut;
+      const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
-      console.log("❌ Conexão fechada!", lastDisconnect?.error);
-
-      if (shouldReconnect) {
-        console.log("🔄 Tentando reconectar...");
-        startBot();
+      if (reason === DisconnectReason.loggedOut) {
+        console.log(`⚠️ [${sessionId}] Sessão deslogada. Limpando arquivos...`);
+        sessions.delete(sessionId);
+        fs.rmSync(`auth/${sessionId}`, { recursive: true, force: true });
+        await start("default");
       } else {
-        console.log("🚪 Sessão encerrada. Escaneie o QR Code novamente.");
+        console.log(`🔄 Reconectando sessão ${sessionId}...`);
+        await start("default");
       }
     }
   });
 
   sock.ev.on("creds.update", saveCreds);
-}
+};
 
 app.post("/enviar", async (req, res) => {
-  const { telefone, token } = req.body as IRequest;
-  console.log(req.body);
+  const { telefone, token } = req.body as {
+    telefone: string;
+    token: string;
+  };
 
-  if (!sock || !isConnected) {
-    return res
-      .status(500)
-      .json({ error: "WhatsApp não está conectado. Escaneie o QR Code." });
-  }
-
-  try {
-    await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
-      text: `O seu token de acesso: ${token}`,
+  if (!telefone || !token) {
+    return res.status(400).json({
+      status: "error",
+      message: "É necessário informar o token e o telefone",
     });
-
-    return res.sendStatus(200);
-  } catch (err) {
-    console.error("Erro ao enviar mensagem:", err);
-    return res.status(500).json({ error: "Falha ao enviar mensagem." });
   }
+
+  const sessionId = "default";
+
+  const sock = sessions.get(sessionId);
+
+  if (!sock) {
+    return res.status(500).json({
+      status: "error",
+      message: "Sessão não iniciada",
+    });
+  }
+
+  await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
+    text: `O seu token de acesso: ${token}`,
+  });
+
+  return res.sendStatus(200);
 });
 
-startBot();
-
-app.listen(3333, () => {
-  console.log("🚀 Server rodando na porta 3333!");
+app.listen(3333, async () => {
+  console.log("🚀 Server rodando na porta 3333");
+  await start("default");
 });
