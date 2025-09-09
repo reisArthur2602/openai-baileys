@@ -26,83 +26,99 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const sessions = new Map<string, WASocket>();
+let sock: WASocket | null = null;
 
 const start = async (sessionId: string = "default") => {
   const { state, saveCreds } = await useMultiFileAuthState(`auth/${sessionId}`);
 
-  const sock = makeWASocket({
-    printQRInTerminal: false,
+  const sockWa = makeWASocket({
     auth: state,
     logger: pino({ level: "silent" }),
   });
 
-  sessions.set(sessionId, sock);
+  sock = sockWa;
 
-  sock.ev.on("connection.update", async (update) => {
+  sockWa.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
-      logger.info(`[${sessionId}] QR Code gerado. Escaneie para logar.`);
+      logger.info(
+        `[PENDING] QR code gerado. Abra o WhatsApp e escaneie para conectar`
+      );
       qrCodeTerminal.generate(qr, { small: true });
     }
 
     if (connection === "open") {
-      logger.info(`[${sessionId}] Sessão conectada com sucesso ✅`);
+      logger.info(`[ONLINE] Sessao conectada com sucesso`);
     }
 
     if (connection === "close") {
       const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
       if (reason === DisconnectReason.loggedOut) {
-        logger.warn(`[${sessionId}] Sessão deslogada. Limpando arquivos...`);
-        sessions.delete(sessionId);
+        logger.warn(`[${sessionId}] Sessao encerrada pelo WhatsApp`);
         fs.rmSync(`auth/${sessionId}`, { recursive: true, force: true });
         await start("default");
       } else {
-        logger.warn(`[${sessionId}] Conexão perdida. Tentando reconectar...`);
+        logger.warn(`[${sessionId}] Restabelecendo conexAo...`);
         await start("default");
       }
     }
   });
 
-  sock.ev.on("creds.update", saveCreds);
+  sockWa.ev.on("creds.update", saveCreds);
 };
 
 app.post("/enviar", async (req, res) => {
-  const { telefone, token } = req.body as {
-    telefone: string;
-    token: string;
-  };
+  try {
+    const { telefone, token } = req.body as {
+      telefone: string;
+      token: string;
+    };
 
-  if (!telefone || !token) {
-    logger.error("Tentativa de envio sem telefone ou token");
-    return res.status(400).json({
-      status: "error",
-      message: "É necessário informar o token e o telefone",
+    if (!telefone || !token) {
+      logger.error(
+        `[SEND] Requisicao invalida: telefone ou token nao informado`
+      );
+      return res.status(400).json({
+        status: "error",
+        message: "Informe telefone e token no corpo da requisicao",
+      });
+    }
+
+    const jid = `${telefone.replace(/\D/g, "")}@s.whatsapp.net`;
+
+    if (!sock) {
+      logger.error(
+        `[SESSION] Nenhuma sessao ativa. Escaneie o QR code para conectar`
+      );
+      return res.status(503).json({
+        status: "unavailable",
+        message:
+          "Sessao WhatsApp indisponivel. Escaneie o QR code no console do servidor",
+      });
+    }
+
+    await sock.sendMessage(jid, {
+      text: `Olá, seu token de acesso é: ${token}.\n \nUtilize este codigo para validar o acesso ao sistema.`,
     });
-  }
 
-  const sessionId = "default";
-  const sock = sessions.get(sessionId);
-
-  if (!sock) {
-    logger.error("Sessão não iniciada ao tentar enviar mensagem");
+    logger.info(`[SEND] Mensagem enviada para ${jid}`);
+    return res.status(200).json({
+      status: "success",
+      message: `Mensagem enviada com sucesso para +${telefone}`,
+    });
+  } catch (error) {
+    logger.error(`[ERROR] Falha ao enviar mensagem`);
     return res.status(500).json({
       status: "error",
-      message: "Sessão não iniciada",
+      message:
+        "Nao foi possivel enviar a mensagem. Confirme sessao e numero (DDI + DDD)",
     });
   }
-
-  await sock.sendMessage(`${telefone}@s.whatsapp.net`, {
-    text: `O seu token de acesso: ${token}`,
-  });
-
-  logger.info(`Mensagem enviada para ${telefone}`);
-  return res.sendStatus(200);
 });
 
 app.listen(3333, async () => {
-  logger.info("🚀 Server rodando na porta 3333");
+  logger.info("[BOOT] Servidor iniciado na porta 3333");
   await start("default");
 });
