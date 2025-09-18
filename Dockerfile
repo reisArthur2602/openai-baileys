@@ -1,16 +1,17 @@
-
-FROM node:20-alpine as build
+# build stage
+FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
-RUN npm run build  # Certifique-se que o build gera dist/server.js
+RUN npm run build
 
-# Etapa 2 - Runtime
+# runtime stage
 FROM node:20-alpine
 WORKDIR /app
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/dist ./dist
-RUN npm install --omit=dev
-EXPOSE 3000
+COPY --from=build /app/node_modules ./node_modules
+ENV NODE_ENV=production
+EXPOSE 3334
 CMD ["node", "dist/server.js"]
