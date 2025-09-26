@@ -66,13 +66,11 @@ const start = async (sessionId: string = "default") => {
       const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
       if (reason === DisconnectReason.loggedOut) {
-        logger.warn(`[${sessionId}] Sessão encerrada pelo WhatsApp`);
+        logger.warn(`[${sessionId}] Sessão encerrada `);
         fs.rmSync(`auth/${sessionId}`, { recursive: true, force: true });
-        await start(sessionId); // reinicia a mesma sessão
-      } else {
-        logger.warn(`[${sessionId}] Conexão perdida. Tentando reconectar...`);
-        await start(sessionId);
       }
+
+      await start(sessionId);
     }
   });
 
@@ -93,7 +91,7 @@ const start = async (sessionId: string = "default") => {
 
     const currentDoctor = doctors.get(phone);
     if (!currentDoctor || currentDoctor.state !== "await_confirmation") return;
-  
+
     logger.info(`[DOCTOR] Encontrado médico cadastrado: ${currentDoctor.name}`);
 
     if (text.includes("sim")) {
