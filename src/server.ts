@@ -216,7 +216,7 @@ app.post("/cadastro-medico", async (req, res) => {
 });
 
 // Inicialização do servidor
-app.listen(3334, async () => {
+app.listen(3334, "0.0.0.0", async () => {
   logger.info("[BOOT] Servidor iniciado na porta 3334");
   await start("default");
 });
