@@ -3,8 +3,6 @@ services:
   app:
     build: .
     container_name: cdr-token
-    restart: always
-    environment:
-      - NODE_ENV=production
+    restart: unless-stopped
     ports:
       - "3334:3334"

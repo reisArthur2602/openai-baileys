@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import { pino } from "pino";
+
 import makeWASocket, {
   useMultiFileAuthState,
   DisconnectReason,
@@ -9,7 +11,6 @@ import makeWASocket, {
 import { Boom } from "@hapi/boom";
 import qrCodeTerminal from "qrcode-terminal";
 import fs from "fs";
-import { pino } from "pino";
 
 const logger = pino({
   level: "info",
