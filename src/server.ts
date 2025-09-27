@@ -10,6 +10,7 @@ import makeWASocket, {
 
 import { Boom } from "@hapi/boom";
 import qrCodeTerminal from "qrcode-terminal";
+import QRCode from "qrcode";
 import fs from "fs";
 
 const logger = pino({
@@ -23,10 +24,11 @@ const logger = pino({
 });
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
 let sock: WASocket | null = null;
+let lastQr: string | null = null; // QR atual
 
 type Doctor = {
   phone: string;
@@ -35,7 +37,6 @@ type Doctor = {
   link: string;
 };
 
-// Mapeamento dos médicos cadastrados
 const doctors = new Map<string, Doctor>();
 
 const start = async (sessionId: string = "default") => {
@@ -52,8 +53,9 @@ const start = async (sessionId: string = "default") => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      lastQr = qr; // salva QR para a rota HTTP
       logger.info(
-        `[PENDING] QR code gerado. Escaneie no WhatsApp para conectar`
+        `[PENDING] QR code gerado. Acesse http://<VPS_IP>:3334/qr para escanear`
       );
       qrCodeTerminal.generate(qr, { small: true });
     }
@@ -66,7 +68,7 @@ const start = async (sessionId: string = "default") => {
       const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
 
       if (reason === DisconnectReason.loggedOut) {
-        logger.warn(`[${sessionId}] Sessão encerrada `);
+        logger.warn(`[${sessionId}] Sessão encerrada`);
         fs.rmSync(`auth/${sessionId}`, { recursive: true, force: true });
       }
 
@@ -112,14 +114,17 @@ const start = async (sessionId: string = "default") => {
 
 // ================== ROTAS ==================
 
+// Rota para QR code
+app.get("/qr", async (req, res) => {
+  if (!lastQr) return res.status(404).send("QR ainda não gerado");
+  res.setHeader("Content-Type", "image/png");
+  QRCode.toFileStream(res, lastQr, { width: 300 });
+});
+
 // Enviar token
 app.post("/enviar", async (req, res) => {
   try {
-    const { telefone, token } = req.body as {
-      telefone: string;
-      token: string;
-    };
-
+    const { telefone, token } = req.body as { telefone: string; token: string };
     if (!telefone || !token) {
       logger.error(
         `[SEND] Requisição inválida: telefone ou token não informado`
@@ -136,7 +141,8 @@ app.post("/enviar", async (req, res) => {
       logger.error(`[SESSION] Nenhuma sessão ativa`);
       return res.status(503).json({
         status: "unavailable",
-        message: "Sessão WhatsApp indisponível. Escaneie o QR code no console",
+        message:
+          "Sessão WhatsApp indisponível. Escaneie o QR code no console ou acesse /qr",
       });
     }
 
@@ -169,7 +175,6 @@ app.post("/cadastro-medico", async (req, res) => {
       nome_medico: string;
       link: string;
     };
-
     if (!telefone || !nome_medico || !link) {
       logger.error(`[CADASTRO] Requisição inválida`);
       return res.status(400).json({
@@ -185,7 +190,8 @@ app.post("/cadastro-medico", async (req, res) => {
       logger.error(`[SESSION] Nenhuma sessão ativa`);
       return res.status(503).json({
         status: "unavailable",
-        message: "Sessão WhatsApp indisponível. Escaneie o QR code no console",
+        message:
+          "Sessão WhatsApp indisponível. Escaneie o QR code no console ou acesse /qr",
       });
     }
 
@@ -199,8 +205,8 @@ app.post("/cadastro-medico", async (req, res) => {
       state: "await_confirmation",
       link,
     });
-
     logger.info(`[CADASTRO] Médico cadastrado e mensagem enviada para ${jid}`);
+
     return res.status(200).json({
       status: "success",
       message: `Cadastro realizado e mensagem enviada para +${telefone}`,
