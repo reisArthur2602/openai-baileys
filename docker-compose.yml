@@ -1,8 +1,14 @@
-version: "3.9"
 services:
   app:
-    build: .
-    container_name: cdr-token
+    container_name: api-token-cdr
     restart: unless-stopped
+    build: .
+    environment:
+      - NODE_ENV=production
+      - PORT=3334
     ports:
       - "3334:3334"
+    expose:
+      - "3334"
+    volumes:
+      - .:/app
