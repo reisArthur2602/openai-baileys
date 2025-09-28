@@ -3,12 +3,8 @@ services:
     build: .
     container_name: api-token-cdr
     restart: unless-stopped
-    environment:
-      - NODE_ENV=production
     ports:
       - "3334:3334"
-    expose:
-      - "3334"
     volumes:
       - .:/app        
-      - /app/node_modules 
+      
