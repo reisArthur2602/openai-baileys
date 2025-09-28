@@ -2,9 +2,9 @@ services:
   app:
     build: .
     container_name: api-token-cdr
+    entrypoint: ./entrypoint.sh
     restart: unless-stopped
     ports:
       - "3334:3334"
     volumes:
-      - .:/app        
-      
+      - .:/app
