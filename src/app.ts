@@ -80,14 +80,13 @@ app.get("/qr", async (req, res) => {
   QRCode.toFileStream(res, lastQr, { width: 300 });
 });
 
-// Enviar mensagem simples
 app.post("/enviar", async (req, res) => {
   try {
-    const { telefone, mensagem } = req.body;
-    if (!telefone || !mensagem)
+    const { telefone, token } = req.body;
+    if (!telefone || !token)
       return res.status(400).json({
         status: "error",
-        message: "Informe telefone e mensagem no corpo da requisicao",
+        message: "Informe telefone e token no corpo da requisicao",
       });
 
     if (!sock)
@@ -97,7 +96,11 @@ app.post("/enviar", async (req, res) => {
       });
 
     const jid = `${telefone.replace(/\D/g, "")}@s.whatsapp.net`;
-    await sock.sendMessage(jid, { text: mensagem });
+    
+    await sock.sendMessage(jid, {
+      text: `🔑 Olá! Seu token de acesso é: ${token}.\n\nUtilize este código para validar o acesso ao sistema.`,
+    });
+
     logger.info(`📤 Mensagem enviada para ${jid}`);
 
     return res.status(200).json({ status: "success" });
